@@ -30,16 +30,16 @@ void getcwdShell();
 void initShell(int isNormalMode);
 void runShell(int isNormalMode);
 void execComposedNormal(char *cmd1[], char *cmd2[]);
+int execBuiltin(char *cmd1[]);
 //  **********************
 void readInput(char command[]);
 void handleCommand(char command[], int isNormalMode);
 
-void parseCommand(char command[], char *argv1[]);
+void parseCommand(char command[], char *cmd1[]);
 int parseComposedCommand(char command[], char *commands[]);
-int parseUnknownCommand(char command[], char *argv1[], char *argv2[]);
-int handleBuiltInCommands(char *argv1[]);
-void executeCommand(char *argv1[]);
-void executeComposedCommand(char *argv1[], char *argv2[]);
+int parseUnknownCommand(char command[], char *cmd1[], char *cmd2[]);
+void executeCommand(char *cmd1[]);
+void executeComposedCommand(char *cmd1[], char *cmd2[]);
 
 int main(int argc, char *argv[])
 {
@@ -200,16 +200,16 @@ void readInput(char command[])
     strcpy(command, buffer);
 }
 
-void parseCommand(char command[], char *argv1[])
+void parseCommand(char command[], char *cmd1[])
 {
     for (int i = 0; i < MAX_ARGS + 1; i++)
     {
-        argv1[i] = strsep(&command, " ");
-        if (argv1[i] == NULL)
+        cmd1[i] = strsep(&command, " ");
+        if (cmd1[i] == NULL)
         {
             break;
         }
-        i -= (strlen(argv1[i]) == 0);
+        i -= (strlen(cmd1[i]) == 0);
     }
 }
 
@@ -227,20 +227,20 @@ int parseComposedCommand(char command[], char *commands[])
     return (commands[1] != NULL);
 }
 
-int parseUnknownCommand(char command[], char *argv1[], char *argv2[])
+int parseUnknownCommand(char command[], char *cmd1[], char *cmd2[])
 {
     char *commands[2];
     int isComposedCommand = parseComposedCommand(command, commands);
     if (isComposedCommand)
     {
-        parseCommand(commands[0], argv1);
-        parseCommand(commands[1], argv2);
+        parseCommand(commands[0], cmd1);
+        parseCommand(commands[1], cmd2);
     }
     else
     {
-        parseCommand(command, argv1);
+        parseCommand(command, cmd1);
     }
-    int isBuiltInCommand = handleBuiltInCommands(argv1);
+    int isBuiltInCommand = execBuiltin(cmd1);
     if (isBuiltInCommand)
     {
         return -1;
@@ -248,29 +248,31 @@ int parseUnknownCommand(char command[], char *argv1[], char *argv2[])
     return isComposedCommand;
 }
 
-int handleBuiltInCommands(char *argv1[])
+int execBuiltin(char *cmd1[])
 {
-    if (strcmp(argv1[0], "exit") == 0)
-    { // quit
-        printf("\nThank you for using Bilshell :)\n");
-        exit(0); // successfully exit
-    }
-    else if (strcmp(argv1[0], "cd") == 0)
+    int isBuiltInCmd = 0; // 0 if the command is a builtin command
+    if (strcmp(cmd1[0], "exit") == 0)
     {
-        chdir(argv1[1]); // change directory
-        return 1;
+        printf("\nExiting the Intercepting Shell Program...\n");
+        exit(0);
     }
-    else if (strcmp(argv1[0], "help") == 0)
+    else if (strcmp(cmd1[0], "help") == 0)
     {
-        printf("\nBILSHELL:\nA simple command line interpreter that supports "
-               "the following commands:\n> exit\n> cd\n> help\n> many UNIX commands"
-               "\n> composed commands of two\n");
-        return 1;
+        printf("\nISP:\nAn intercepting shell program"
+               "Supported builtin commands: \n > exit \n"
+               "> cd\n> help\n> and UNIX commands (touch, cp, mkdir...)"
+               "\n> two consecutive commands can executed when seperated by a pipe symbol (|)\n");
+        return !isBuiltInCmd;
     }
-    return 0;
+    else if (strcmp(cmd1[0], "cd") == 0)
+    {
+        chdir(cmd1[1]);
+        return !isBuiltInCmd;
+    }
+    return isBuiltInCmd;
 }
 
-void executeCommand(char *argv1[])
+void executeCommand(char *cmd1[])
 {
     pid_t pid = fork(); // fork a child
     if (pid < 0)
@@ -280,7 +282,7 @@ void executeCommand(char *argv1[])
     }
     else if (pid == 0)
     { // child process
-        if (execvp(argv1[0], argv1) < 0)
+        if (execvp(cmd1[0], cmd1) < 0)
         {
             fprintf(stderr, "\nCommand execution failed.");
             exit(1);
@@ -293,7 +295,7 @@ void executeCommand(char *argv1[])
     }
 }
 
-void executeComposedCommand(char *argv1[], char *argv2[])
+void executeComposedCommand(char *cmd1[], char *cmd2[])
 {
     // some statistics
     int bytesTransferred = 0;
@@ -323,7 +325,7 @@ void executeComposedCommand(char *argv1[], char *argv2[])
         close(fd2[WRITE_END]);
         close(fd1[READ_END]);
         dup2(fd1[WRITE_END], STDOUT_FD);
-        if (execvp(argv1[0], argv1) < 0)
+        if (execvp(cmd1[0], cmd1) < 0)
         {
             fprintf(stderr, "\nExecution of the first command failed.");
             exit(1);
@@ -343,7 +345,7 @@ void executeComposedCommand(char *argv1[], char *argv2[])
             close(fd1[WRITE_END]);
             close(fd2[WRITE_END]);
             dup2(fd2[READ_END], STDIN_FD);
-            if (execvp(argv2[0], argv2) < 0)
+            if (execvp(cmd2[0], cmd2) < 0)
             {
                 fprintf(stderr, "\nExecution of the second command failed.");
                 exit(1);
@@ -376,23 +378,23 @@ void executeComposedCommand(char *argv1[], char *argv2[])
 
 void handleCommand(char command[], int isNormalMode)
 {
-    char *argv1[MAX_ARGS + 1];
-    char *argv2[MAX_ARGS + 1];
-    int isComposedCommand = parseUnknownCommand(command, argv1, argv2);
+    char *cmd1[MAX_ARGS + 1];
+    char *cmd2[MAX_ARGS + 1];
+    int isComposedCommand = parseUnknownCommand(command, cmd1, cmd2);
     if (isComposedCommand == 1)
     {
         if (isNormalMode == 1)
         {
-            execComposedNormal(argv1, argv2);
+            execComposedNormal(cmd1, cmd2);
         }
         else
         {
             // tapped
-            executeComposedCommand(argv1, argv2);
+            executeComposedCommand(cmd1, cmd2);
         }
     }
     else if (isComposedCommand == 0)
     {
-        executeCommand(argv1);
+        executeCommand(cmd1);
     }
 }
