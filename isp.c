@@ -30,6 +30,9 @@ void execComposedTapped(char *cmd1[], char *cmd2[]);
 int execBuiltin(char *cmd1[]);
 void runParser(char command[], int isNormalMode);
 void readCommand(char *command);
+void runPipeSourceNormal(int pfd[], char *cmd1[]);
+void runPipeDestNormal(int pfd[], char *cmd2[]);
+
 //  **********************
 
 void parseCommand(char command[], char *cmd1[]);
@@ -89,68 +92,6 @@ void getcwdShell()
 }
 
 /**
- * Takes a composed command made up of two commands, The normal
- * mode implementation relies on the use of single pipe
- * which handles the I/O direction in between the programs.
- * @param cmd1 Command referring to the first part of the composed command
- * @param cmd2 Command referring to the second part of the composed command
- */
-void execComposedNormal(char *cmd1[], char *cmd2[])
-{
-    int fd[2]; // pipe
-    if (pipe(fd) < 0)
-    {
-        fprintf(stderr, "\nPipe 1 failed.");
-        exit(1);
-    }
-
-    pid_t pid1 = fork(); // fork child 1
-    if (pid1 < 0)
-    {
-        fprintf(stderr, "\nERROR: fork() failed for child1!");
-        exit(1);
-    }
-    else if (pid1 == 0)
-    {                   // child 1
-        dup2(fd[1], 1); /* this end of the pipe becomes the standard output */
-        close(fd[0]);   /* this process don't need the other end */
-        if (execvp(cmd1[0], cmd1) < 0)
-        {
-            fprintf(stderr, "\nExecution of the first command failed.");
-            exit(1);
-        }
-    }
-    else
-    {
-        pid_t pid2 = fork(); // fork child 2
-        if (pid2 < 0)
-        {
-            fprintf(stderr, "\nERROR: fork() failed for child2!");
-            exit(1);
-        }
-        else if (pid2 == 0)
-        {                   // child 2
-            dup2(fd[0], 0); /* this end of the pipe becomes the standard input */
-            close(fd[1]);   /* this process doesn't need the other end */
-            if (execvp(cmd2[0], cmd2) < 0)
-            {
-                fprintf(stderr, "\nExecution of the second command failed.");
-                exit(1);
-            }
-        }
-        else
-        {
-            // close the unused ends
-            close(fd[0]);
-            close(fd[1]);
-            // wait for the child process to finish
-            wait(NULL);
-            wait(NULL);
-        }
-    }
-}
-
-/**
  * Runs the program in the interactive mode, where the user enters the commands.
  * to the shell. The exexution continues untill user exits with 'exit' command.
  */
@@ -201,7 +142,6 @@ int parseComposedCommand(char command[], char *commands[])
             break;
         }
     }
-    // return 1 (true) if the command is a composed one, 0 (false) otherwise
     return (commands[1] != NULL);
 }
 
@@ -383,5 +323,71 @@ void runParser(char command[], int isNormalMode)
     else if (isComposedCommand == 0)
     {
         executeCommand(cmd1);
+    }
+}
+
+/**
+ * Takes a composed command made up of two commands, The normal
+ * mode implementation relies on the use of single pipe
+ * which handles the I/O direction in between the programs.
+ * @param cmd1 Command referring to the first part of the composed command
+ * @param cmd2 Command referring to the second part of the composed command
+ */
+void execComposedNormal(char *cmd1[], char *cmd2[])
+{
+    int fd[2];
+    pipe(fd);
+    // configure the pipes
+    runPipeSourceNormal(fd, cmd1);
+    runPipeDestNormal(fd, cmd2);
+    // close the unused pipes
+    close(fd[0]);
+    close(fd[1]);
+    //  wait execution of the children
+    wait(NULL);
+    wait(NULL);
+}
+
+void runPipeSourceNormal(int pfd[], char *cmd1[])
+{
+    int pid;
+
+    switch (pid = fork())
+    {
+
+    case 0:                        // child process
+        dup2(pfd[OUT_FD], OUT_FD); // stdout
+        close(pfd[IN_FD]);         // close unused end
+        execvp(cmd1[0], cmd1);     // exec command
+        perror(cmd1[0]);           // error
+
+    default: // parent
+        break;
+
+    case -1:
+        perror("fork");
+        exit(1);
+    }
+}
+
+void runPipeDestNormal(int pfd[], char *cmd2[])
+{
+    int pid;
+
+    switch (pid = fork())
+    {
+
+    case 0:                      // child process
+        dup2(pfd[IN_FD], IN_FD); // stdin
+        close(pfd[OUT_FD]);      // close unused pipe
+        execvp(cmd2[0], cmd2);   // exec command
+        perror(cmd2[0]);         // error
+
+    default: // parent
+        break;
+
+    case -1:
+        perror("fork");
+        exit(1);
     }
 }
