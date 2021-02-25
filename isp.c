@@ -12,7 +12,6 @@
 #include <stdlib.h>
 
 // definitions
-#define MAX_LETTERS 1000
 #define MAX_ARGS 10
 #define READ_END 0
 #define WRITE_END 1
@@ -21,6 +20,7 @@
 
 // global variable(s)
 int N = 10000;
+int COMMAND_SIZE = 10000;
 
 // custom defined methods
 void clearShell();
@@ -31,8 +31,8 @@ void execComposedNormal(char *cmd1[], char *cmd2[]);
 void execComposedTapped(char *cmd1[], char *cmd2[]);
 int execBuiltin(char *cmd1[]);
 void runParser(char command[], int isNormalMode);
+void readCommand(char *command);
 //  **********************
-void readInput(char command[]);
 
 void parseCommand(char command[], char *cmd1[]);
 int parseComposedCommand(char command[], char *commands[]);
@@ -92,8 +92,8 @@ void getcwdShell()
 
 /**
  * Takes a composed command made up of two commands, The normal
- * mode implementation relies on the use of single pipe which handles the
- *  I/O direction in between the programs.
+ * mode implementation relies on the use of single pipe
+ * which handles the I/O direction in between the programs.
  * @param cmd1 Command referring to the first part of the composed command
  * @param cmd2 Command referring to the second part of the composed command
  */
@@ -158,25 +158,25 @@ void execComposedNormal(char *cmd1[], char *cmd2[])
  */
 void runShell(int isNormalMode)
 {
-    char command[MAX_LETTERS];
+    char command[COMMAND_SIZE];
     while (1)
     {
-        readInput(command);
+        readCommand(command);
         runParser(command, isNormalMode);
     }
 }
 
 /**
- * Reads a line from stdin and saves it into the command string.
- * @param command The string into which the entered line is saved.
+ * Reads the comand from the input stream.
+ * @param command The string obtained from the input stream.
  */
-void readInput(char command[])
+void readCommand(char *command)
 {
-    char buffer[MAX_LETTERS];
+    char buffer[COMMAND_SIZE];
     getcwdShell();
     printf("\nisp$: ");
-    fgets(buffer, MAX_LETTERS, stdin);
-    buffer[strcspn(buffer, "\n\r")] = '\0'; // remove the newline at the end
+    fgets(buffer, COMMAND_SIZE, stdin);
+    buffer[strcspn(buffer, "\n\r")] = '\0';
     strcpy(command, buffer);
 }
 
