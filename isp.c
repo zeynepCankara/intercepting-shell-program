@@ -1,19 +1,17 @@
 
 
-/**
- * The code below makes use of various system calls
- * and pipes as an Inter Process Communication (IPC) mechanism.
- * @author Zeynep Cankara
- * @version 1.0
- */
+// Copyright 2021 by the Zeynep Cankara. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+// The code below makes use of various system calls and pipes as an Inter Process Communication (IPC) mechanism.
 
+// library imports
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 
-// #define clearTerminal() printf("\033[H\033[J")
+// definitions
 #define MAX_LETTERS 1000
 #define MAX_ARGS 10
 #define READ_END 0
@@ -21,25 +19,25 @@
 #define STDIN_FD 0
 #define STDOUT_FD 1
 
-unsigned int N = 10000;
+// global variable(s)
+int N = 10000;
 
 // custom defined methods
 void clearShell();
-//void initCommand(command *commands, char command[], char *argv[]);
 void getcwdShell();
 void initShell(int isNormalMode);
 void runShell(int isNormalMode);
 void execComposedNormal(char *cmd1[], char *cmd2[]);
+void execComposedTapped(char *cmd1[], char *cmd2[]);
 int execBuiltin(char *cmd1[]);
+void runParser(char command[], int isNormalMode);
 //  **********************
 void readInput(char command[]);
-void handleCommand(char command[], int isNormalMode);
 
 void parseCommand(char command[], char *cmd1[]);
 int parseComposedCommand(char command[], char *commands[]);
 int parseUnknownCommand(char command[], char *cmd1[], char *cmd2[]);
 void executeCommand(char *cmd1[]);
-void executeComposedCommand(char *cmd1[], char *cmd2[]);
 
 int main(int argc, char *argv[])
 {
@@ -74,11 +72,11 @@ void initShell(int isNormalMode)
            "to quit and \"help\" to read the manual.\n");
     if (isNormalMode)
     {
-        printf("$-Shell running in the normal mode. \n");
+        printf("$-Shell running in the Normal mode. \n");
     }
     else
     {
-        printf("$-Shell running in the tapped mode. \n");
+        printf("$-Shell running in the Tapped mode. \n");
     }
 }
 
@@ -93,20 +91,14 @@ void getcwdShell()
 }
 
 /**
- * Takes two argument vectors, which executed in order such that the output of the
- * first program fed as the input to the second program via using a pipe. The normal
- * mode implementation relies on the use of two pipes which used to handle I/O direction
- * in between the programs.
- * @param cmd1 Argument vector of the first part of the composed command
- * @param cmd2 Argument vector of the second part of the composed command
+ * Takes a composed command made up of two commands, The normal
+ * mode implementation relies on the use of single pipe which handles the
+ *  I/O direction in between the programs.
+ * @param cmd1 Command referring to the first part of the composed command
+ * @param cmd2 Command referring to the second part of the composed command
  */
 void execComposedNormal(char *cmd1[], char *cmd2[])
 {
-    // some statistics
-    //int pid, status;
-    int bytesTransferred = 0;
-    int readCount = 0;
-    int writeCount = 0;
     int fd[2]; // pipe
     if (pipe(fd) < 0)
     {
@@ -124,7 +116,6 @@ void execComposedNormal(char *cmd1[], char *cmd2[])
     {                   // child 1
         dup2(fd[1], 1); /* this end of the pipe becomes the standard output */
         close(fd[0]);   /* this process don't need the other end */
-        printf("\ncmd1: %s\n", *cmd1);
         if (execvp(cmd1[0], cmd1) < 0)
         {
             fprintf(stderr, "\nExecution of the first command failed.");
@@ -143,7 +134,6 @@ void execComposedNormal(char *cmd1[], char *cmd2[])
         {                   // child 2
             dup2(fd[0], 0); /* this end of the pipe becomes the standard input */
             close(fd[1]);   /* this process doesn't need the other end */
-            printf("\ncmd2: %s\n", *cmd2);
             if (execvp(cmd2[0], cmd2) < 0)
             {
                 fprintf(stderr, "\nExecution of the second command failed.");
@@ -152,22 +142,12 @@ void execComposedNormal(char *cmd1[], char *cmd2[])
         }
         else
         {
+            // close the unused ends
             close(fd[0]);
             close(fd[1]);
-            int bytesRead; // statistic
-            char buffer[N];
-            while ((bytesRead = read(fd[READ_END], buffer, N)) > 0)
-            {
-                int bytesWritten = write(fd[WRITE_END], buffer, bytesRead);
-                bytesTransferred += bytesRead + bytesWritten;
-                readCount++;
-                writeCount++;
-            }
-            readCount++;
+            // wait for the child process to finish
             wait(NULL);
             wait(NULL);
-            printf("\ncharacter-count: %d\nread-call-count: %d\nwrite-call-count: %d\n",
-                   bytesTransferred, readCount, writeCount);
         }
     }
 }
@@ -182,7 +162,7 @@ void runShell(int isNormalMode)
     while (1)
     {
         readInput(command);
-        handleCommand(command, isNormalMode);
+        runParser(command, isNormalMode);
     }
 }
 
@@ -295,7 +275,16 @@ void executeCommand(char *cmd1[])
     }
 }
 
-void executeComposedCommand(char *cmd1[], char *cmd2[])
+/**
+ * Takes two argument vectors, which executed in order such that the output of the
+ * first program fed as the input to the second program via using a pipe. The tapped
+ * mode implementation relies on the use of two pipes which used to handle I/O direction
+ * in between the programs. The output of the first program first directed to the main
+ * program which later fed into the input of the second program via pipe.
+ * @param cmd1 Command referring to the first part of the composed command
+ * @param cmd2 Command referring to the second part of the composed command
+ */
+void execComposedTapped(char *cmd1[], char *cmd2[])
 {
     // some statistics
     int bytesTransferred = 0;
@@ -376,7 +365,7 @@ void executeComposedCommand(char *cmd1[], char *cmd2[])
     }
 }
 
-void handleCommand(char command[], int isNormalMode)
+void runParser(char command[], int isNormalMode)
 {
     char *cmd1[MAX_ARGS + 1];
     char *cmd2[MAX_ARGS + 1];
@@ -390,7 +379,7 @@ void handleCommand(char command[], int isNormalMode)
         else
         {
             // tapped
-            executeComposedCommand(cmd1, cmd2);
+            execComposedTapped(cmd1, cmd2);
         }
     }
     else if (isComposedCommand == 0)

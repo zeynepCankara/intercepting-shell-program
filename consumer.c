@@ -1,28 +1,33 @@
-/**
- * A simple program to read M characters one by one.
- * @author Efe Acer
- * @version 1.0
- */
+// Copyright 2021 by the Zeynep Cankara. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+// Program consumes M random alphanum letters incrementally.
 
-// Necessary imports
+// imports
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 
-// Definitions
-#define STDIN_FD 0
+// definition
+#define INPUT_FD 0
 
-// Global Variables
-int M = 10;
+// global
+// int M = 10;
 
-// Main function
-int main(int argc, char* argv[]) {
-    if (argc > 1) {
-        M = atoi(argv[1]); // get the value of M (will be used in experiments)
+// Comsumer program
+int main(int argc, char *argv[])
+{
+    int M = 0;
+    if (argc > 1)
+    {
+        // experiements
+        M = atoi(argv[1]);
     }
     int bytesRead = 0;
-    while (bytesRead < M) {
+    while (bytesRead < M)
+    {
         char toRead;
-        bytesRead += read(STDIN_FD, &toRead , 1);
+        bytesRead += read(INPUT_FD, &toRead, 1);
     }
     return 0;
 }
