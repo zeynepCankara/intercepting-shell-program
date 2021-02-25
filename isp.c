@@ -32,7 +32,8 @@ void runParser(char command[], int isNormalMode);
 void readCommand(char *command);
 void runPipeSourceNormal(int pfd[], char *cmd1[]);
 void runPipeDestNormal(int pfd[], char *cmd2[]);
-
+int runPipeSourceTapped(int fd1[], int fd2[], char *cmd1[]);
+int runPipeDestTapped(int fd1[], int fd2[], char *cmd2[]);
 //  **********************
 
 void parseCommand(char command[], char *cmd1[]);
@@ -224,61 +225,17 @@ void executeCommand(char *cmd1[])
  */
 void execComposedTapped(char *cmd1[], char *cmd2[])
 {
-    // some statistics
     int bytesTransferred = 0;
     int readCount = 0;
     int writeCount = 0;
     int fd1[2]; // pipe 1
-    if (pipe(fd1) < 0)
-    {
-        fprintf(stderr, "\nPipe 1 failed.");
-        exit(1);
-    }
     int fd2[2]; // pipe 2
-    if (pipe(fd2) < 0)
+    pipe(fd1);
+    pipe(fd2);
+    if (runPipeSourceTapped(fd1, fd2, cmd1) == 1)
     {
-        fprintf(stderr, "\nPipe 2 failed.");
-        exit(1);
-    }
-    pid_t pid1 = fork(); // fork child 1
-    if (pid1 < 0)
-    {
-        fprintf(stderr, "\nFork failed for child 1.");
-        exit(1);
-    }
-    else if (pid1 == 0)
-    {                      // child 1
-        close(fd2[IN_FD]); // close unused ends
-        close(fd2[OUT_FD]);
-        close(fd1[IN_FD]);
-        dup2(fd1[OUT_FD], OUT_FD);
-        if (execvp(cmd1[0], cmd1) < 0)
-        {
-            fprintf(stderr, "\nExecution of the first command failed.");
-            exit(1);
-        }
-    }
-    else
-    {
-        pid_t pid2 = fork(); // fork child 2
-        if (pid2 < 0)
-        {
-            fprintf(stderr, "\nFork failed for child 2.");
-            exit(1);
-        }
-        else if (pid2 == 0)
-        {                      // child 2
-            close(fd1[IN_FD]); // close unused ends
-            close(fd1[OUT_FD]);
-            close(fd2[OUT_FD]);
-            dup2(fd2[IN_FD], IN_FD);
-            if (execvp(cmd2[0], cmd2) < 0)
-            {
-                fprintf(stderr, "\nExecution of the second command failed.");
-                exit(1);
-            }
-        }
-        else
+        if (runPipeDestTapped(fd1, fd2, cmd2) == 1)
+
         {                       // parent
             close(fd1[OUT_FD]); // close unused ends
             close(fd2[IN_FD]);
@@ -301,6 +258,56 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
                    bytesTransferred, readCount, writeCount);
         }
     }
+}
+
+int runPipeSourceTapped(int fd1[], int fd2[], char *cmd1[])
+{
+    int pid;
+
+    switch (pid = fork())
+    {
+
+    case 0:                // child process
+        close(fd2[IN_FD]); // close unused ends
+        close(fd2[OUT_FD]);
+        close(fd1[IN_FD]);
+        dup2(fd1[OUT_FD], OUT_FD);
+        execvp(cmd1[0], cmd1); // exec command
+        perror(cmd1[0]);       // error
+
+    default: // parent
+        break;
+
+    case -1:
+        perror("fork");
+        exit(1);
+    }
+    return 1;
+}
+
+int runPipeDestTapped(int fd1[], int fd2[], char *cmd2[])
+{
+    int pid;
+
+    switch (pid = fork())
+    {
+
+    case 0:                // child process
+        close(fd1[IN_FD]); // close unused ends
+        close(fd1[OUT_FD]);
+        close(fd2[OUT_FD]);
+        dup2(fd2[IN_FD], IN_FD);
+        execvp(cmd2[0], cmd2); // exec command
+        perror(cmd2[0]);       // error
+
+    default: // parent
+        break;
+
+    case -1:
+        perror("fork");
+        exit(1);
+    }
+    return 1;
 }
 
 void runParser(char command[], int isNormalMode)
