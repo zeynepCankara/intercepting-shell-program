@@ -13,10 +13,8 @@
 
 // definitions
 #define MAX_ARGS 10
-#define READ_END 0
-#define WRITE_END 1
-#define STDIN_FD 0
-#define STDOUT_FD 1
+#define IN_FD 0
+#define OUT_FD 1
 
 // global variable(s)
 int N = 10000;
@@ -309,11 +307,11 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
         exit(1);
     }
     else if (pid1 == 0)
-    {                         // child 1
-        close(fd2[READ_END]); // close unused ends
-        close(fd2[WRITE_END]);
-        close(fd1[READ_END]);
-        dup2(fd1[WRITE_END], STDOUT_FD);
+    {                      // child 1
+        close(fd2[IN_FD]); // close unused ends
+        close(fd2[OUT_FD]);
+        close(fd1[IN_FD]);
+        dup2(fd1[OUT_FD], OUT_FD);
         if (execvp(cmd1[0], cmd1) < 0)
         {
             fprintf(stderr, "\nExecution of the first command failed.");
@@ -329,11 +327,11 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
             exit(1);
         }
         else if (pid2 == 0)
-        {                         // child 2
-            close(fd1[READ_END]); // close unused ends
-            close(fd1[WRITE_END]);
-            close(fd2[WRITE_END]);
-            dup2(fd2[READ_END], STDIN_FD);
+        {                      // child 2
+            close(fd1[IN_FD]); // close unused ends
+            close(fd1[OUT_FD]);
+            close(fd2[OUT_FD]);
+            dup2(fd2[IN_FD], IN_FD);
             if (execvp(cmd2[0], cmd2) < 0)
             {
                 fprintf(stderr, "\nExecution of the second command failed.");
@@ -341,22 +339,22 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
             }
         }
         else
-        {                          // parent
-            close(fd1[WRITE_END]); // close unused ends
-            close(fd2[READ_END]);
+        {                       // parent
+            close(fd1[OUT_FD]); // close unused ends
+            close(fd2[IN_FD]);
             // Transfer the bytes written to pipe 1 by child 1 to pipe 2
             int bytesRead; // statistic
             char buffer[N];
-            while ((bytesRead = read(fd1[READ_END], buffer, N)) > 0)
+            while ((bytesRead = read(fd1[IN_FD], buffer, N)) > 0)
             {
-                int bytesWritten = write(fd2[WRITE_END], buffer, bytesRead);
+                int bytesWritten = write(fd2[OUT_FD], buffer, bytesRead);
                 bytesTransferred += bytesRead + bytesWritten;
                 readCount++;
                 writeCount++;
             }
             readCount++;
-            close(fd1[READ_END]); // close unused ends
-            close(fd2[WRITE_END]);
+            close(fd1[IN_FD]); // close unused ends
+            close(fd2[OUT_FD]);
             wait(NULL);
             wait(NULL);
             printf("\ncharacter-count: %d\nread-call-count: %d\nwrite-call-count: %d\n",
