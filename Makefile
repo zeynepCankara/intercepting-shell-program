@@ -1,15 +1,13 @@
 all: isp producer consumer
 
-isp: isp.c
-	gcc -o isp isp.c
-
 producer: producer.c
-	gcc -o producer producer.c
+	gcc -Wall -g -o producer producer.c
 
 consumer: consumer.c
-	gcc -o consumer consumer.c
+	gcc -Wall -g -o consumer consumer.c
+
+isp: isp.c
+	gcc -Wall -g -o isp isp.c
 
 clean:
-	rm fr isp isp.o *~
-	rm fr producer producer.o *~
-	rm fr consumer consumer.o *~
+	rm -fr isp producer consumer *dSYM

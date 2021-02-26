@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <stdlib.h>
+#include <sys/time.h> // for gettimeofday()
 
 // definitions
 #define MAX_ARGS 10
@@ -232,6 +233,13 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
     int fd2[2]; // pipe 2
     pipe(fd1);
     pipe(fd2);
+    struct timeval t1, t2;
+    double elapsedTime;
+
+    // start timer
+    gettimeofday(&t1, NULL);
+
+    // run the command
     if (runPipeSourceTapped(fd1, fd2, cmd1) == 1)
     {
         if (runPipeDestTapped(fd1, fd2, cmd2) == 1)
@@ -256,6 +264,13 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
             wait(NULL);
             printf("\ncharacter-count: %d\nread-call-count: %d\nwrite-call-count: %d\n",
                    bytesTransferred, readCount, writeCount);
+            // timer stop
+            gettimeofday(&t2, NULL);
+
+            // calculate the elapsed time in millisec
+            elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;
+            elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;
+            printf("Elapsed time: %f ms.\n", elapsedTime);
         }
     }
 }
@@ -344,6 +359,16 @@ void execComposedNormal(char *cmd1[], char *cmd2[])
 {
     int fd[2];
     pipe(fd);
+    struct timeval t1, t2;
+    double elapsedTime;
+
+    // start timer
+    gettimeofday(&t1, NULL);
+
+    // compute and print the elapsed time in millisec
+    elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;    // sec to ms
+    elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
+    printf("%f ms.\n", elapsedTime);
     // configure the pipes
     runPipeSourceNormal(fd, cmd1);
     runPipeDestNormal(fd, cmd2);
@@ -353,6 +378,13 @@ void execComposedNormal(char *cmd1[], char *cmd2[])
     //  wait execution of the children
     wait(NULL);
     wait(NULL);
+
+    // stop timer
+    gettimeofday(&t2, NULL);
+    // ccompute the elapsed in millisec
+    elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;    // sec to ms
+    elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
+    printf("Elapsed time: %f ms.\n", elapsedTime);
 }
 
 void runPipeSourceNormal(int pfd[], char *cmd1[])

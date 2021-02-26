@@ -24,14 +24,12 @@ const char ALPHANUM[ALPHANUMERIC_LEN] = {'a', 'b', 'c', 'd', 'e', 'f',
 int main(int argc, char *argv[])
 {
     int M = 0;
-    int numberOfChars = 0;
+    unsigned int numberOfChars = 0;
     if (argc > 1)
     {
-        // set up experiments
+        // M is the number of bytes for the experiments
         M = atoi(argv[1]);
     }
-    // timer random seed
-    srand(time(NULL));
 
     while (numberOfChars < M)
     {

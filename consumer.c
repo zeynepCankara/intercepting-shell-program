@@ -9,10 +9,7 @@
 #include <stdio.h>
 
 // definition
-#define INPUT_FD 0
-
-// global
-// int M = 10;
+#define FD_IN 0
 
 // Comsumer program
 int main(int argc, char *argv[])
@@ -20,14 +17,14 @@ int main(int argc, char *argv[])
     int M = 0;
     if (argc > 1)
     {
-        // experiements
+        // M is the number of bytes for the experiments
         M = atoi(argv[1]);
     }
-    int bytesRead = 0;
-    while (bytesRead < M)
+    unsigned int numberOfChars = 0;
+    while (numberOfChars < M)
     {
         char toRead;
-        bytesRead += read(INPUT_FD, &toRead, 1);
+        numberOfChars += read(FD_IN, &toRead, 1);
     }
     return 0;
 }
