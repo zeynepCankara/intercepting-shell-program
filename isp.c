@@ -1,5 +1,3 @@
-
-
 // Copyright 2021 by the Zeynep Cankara. All rights reserved.
 // The code below makes use of various system calls and pipes as an Inter Process Communication (IPC) mechanism.
 
@@ -16,9 +14,8 @@
 #define OUT_FD 1
 #define NOF_ARGS 20
 
-// global variable(s)
 int N = 5000;
-int COMMAND_SIZE = 10000;
+int INPUT_LEN = 10000;
 
 // custom defined methods
 // shell related
@@ -26,7 +23,6 @@ void clearShell();
 void getcwdShell();
 void initShell(int isNormalMode);
 void runShell(int isNormalMode);
-void runParser(char *buffer, int isNormalMode);
 void readCommand(char *command);
 // command exec related
 void execComposedNormal(char *cmd1[], char *cmd2[]);
@@ -38,15 +34,15 @@ int runPipeSourceTapped(int fd1[], int fd2[], char *cmd1[]);
 int runPipeDestTapped(int fd1[], int fd2[], char *cmd2[]);
 void runCommand(char *cmd1[]);
 // parser related
+void runParser(char *buffer, int isNormalMode);
 void parseSingle(char *buffer, char *cmd1[]);
-int parseComposedCommand(char *buffer, char *commandBuffer[]);
-int parseUnknownCommand(char *buffer, char *cmd1[], char *cmd2[]);
+void parseComposed(char *buffer, char *commandBuffer[], int *composed);
 
 int main(int argc, char *argv[])
 {
     if (argc > 1)
     {
-        N = atoi(argv[1]); // get the value of N (will be used in experiments)
+        N = atoi(argv[1]); //  experiment N value
     }
     int isNormalMode = (atoi(argv[2]) == 1);
 
@@ -71,8 +67,9 @@ void initShell(int isNormalMode)
 {
     clearShell();
     printf("$-Intercepting Shell Program.\n"
-           "Execute system commands from the command shell.\nType \"exit\" "
-           "to quit and \"help\" to read the manual.\n");
+           "$-exit (shell exit), help (see manual),"
+           " \nSupports composed command of two seperated with (|)."
+           "\n You can execute various UNIX commands.\n");
     if (isNormalMode)
     {
         printf("$-Shell running in the Normal mode. \n");
@@ -99,7 +96,7 @@ void getcwdShell()
  */
 void runShell(int isNormalMode)
 {
-    char command[COMMAND_SIZE];
+    char command[INPUT_LEN];
     while (1)
     {
         readCommand(command);
@@ -113,10 +110,10 @@ void runShell(int isNormalMode)
  */
 void readCommand(char *command)
 {
-    char buffer[COMMAND_SIZE];
+    char buffer[INPUT_LEN];
     getcwdShell();
     printf("\nisp$: ");
-    fgets(buffer, COMMAND_SIZE, stdin);
+    fgets(buffer, INPUT_LEN, stdin);
     buffer[strcspn(buffer, "\n\r")] = '\0';
     strcpy(command, buffer);
 }
@@ -137,40 +134,19 @@ void parseSingle(char *buffer, char *cmd1[])
     }
 }
 
-int parseComposedCommand(char *buffer, char *commandBuffer[])
+void parseComposed(char *buffer, char *commandBuffer[], int *composed)
 {
-    //int composed;
-    for (int pos = 0; pos < 2; pos++)
+    int pos = 0;
+    while (pos < 2)
     {
         commandBuffer[pos] = strsep(&buffer, "|");
-        //composed = pos + 1;
         if (!commandBuffer[pos])
         {
             break;
         }
+        pos++;
     }
-    return (commandBuffer[1] != NULL);
-}
-
-int parseUnknownCommand(char *buffer, char *cmd1[], char *cmd2[])
-{
-    char *commandBuffer[2];
-    int isComposedCommand = parseComposedCommand(buffer, commandBuffer);
-    if (isComposedCommand)
-    {
-        parseSingle(commandBuffer[0], cmd1);
-        parseSingle(commandBuffer[1], cmd2);
-    }
-    else
-    {
-        parseSingle(buffer, cmd1);
-    }
-    int isBuiltInCommand = execBuiltin(cmd1);
-    if (isBuiltInCommand)
-    {
-        return -1;
-    }
-    return isComposedCommand;
+    *composed = (commandBuffer[1] != NULL);
 }
 
 int execBuiltin(char *cmd1[])
@@ -181,7 +157,7 @@ int execBuiltin(char *cmd1[])
         printf("\nExiting the Intercepting Shell Program...\n");
         exit(0);
     }
-    else if (strcmp(cmd1[0], "help") == 0)
+    if (strcmp(cmd1[0], "help") == 0)
     {
         printf("\nISP:\nAn intercepting shell program"
                "Supported builtin commands: \n > exit \n"
@@ -189,7 +165,7 @@ int execBuiltin(char *cmd1[])
                "\n> two consecutive commands can executed when seperated by a pipe symbol (|)\n");
         return !isBuiltInCmd;
     }
-    else if (strcmp(cmd1[0], "cd") == 0)
+    if (strcmp(cmd1[0], "cd") == 0)
     {
         chdir(cmd1[1]);
         return !isBuiltInCmd;
@@ -336,8 +312,27 @@ void runParser(char *buffer, int isNormalMode)
 {
     char *cmd1[NOF_ARGS + 1];
     char *cmd2[NOF_ARGS + 1];
-    int isComposedCommand = parseUnknownCommand(buffer, cmd1, cmd2);
-    if (isComposedCommand == 1)
+    char *commandBuffer[2];
+    int composed = 0;
+    int builtin = 0;
+    int isComposed = 0;
+    parseComposed(buffer, commandBuffer, &composed);
+    if (composed)
+    {
+        parseSingle(commandBuffer[0], cmd1); // parse first part
+        parseSingle(commandBuffer[1], cmd2); // parse the second part
+    }
+    else
+    {
+        parseSingle(buffer, cmd1);
+    }
+    builtin = execBuiltin(cmd1);
+    if (!builtin)
+    {
+        isComposed = composed;
+    }
+    //int isComposedCommand = parseUnknownCommand(buffer, cmd1, cmd2);
+    if (isComposed == 1)
     {
         if (isNormalMode == 1)
         {
@@ -349,7 +344,7 @@ void runParser(char *buffer, int isNormalMode)
             execComposedTapped(cmd1, cmd2);
         }
     }
-    else if (isComposedCommand == 0)
+    else if (isComposed == 0)
     {
         runCommand(cmd1);
     }
@@ -372,10 +367,6 @@ void execComposedNormal(char *cmd1[], char *cmd2[])
     // start timer
     gettimeofday(&t1, NULL);
 
-    // compute and print the elapsed time in millisec
-    elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;    // sec to ms
-    elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0; // us to ms
-    printf("%f ms.\n", elapsedTime);
     // configure the pipes
     runPipeSourceNormal(fd, cmd1);
     runPipeDestNormal(fd, cmd2);
