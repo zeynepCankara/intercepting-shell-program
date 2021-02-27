@@ -1,5 +1,4 @@
 // Copyright 2021 by the Zeynep Cankara. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
 // Program consumes M random alphanum letters incrementally.
 
 // imports

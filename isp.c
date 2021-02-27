@@ -1,46 +1,46 @@
 
 
 // Copyright 2021 by the Zeynep Cankara. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
 // The code below makes use of various system calls and pipes as an Inter Process Communication (IPC) mechanism.
 
 // library imports
+#include <sys/wait.h> // children
+#include <stdlib.h>
+#include <sys/time.h> // gettimeofday()
 #include <stdio.h>
 #include <unistd.h>
-#include <string.h>
-#include <sys/wait.h>
-#include <stdlib.h>
-#include <sys/time.h> // for gettimeofday()
+#include <string.h> // prtinf
 
 // definitions
-#define MAX_ARGS 10
 #define IN_FD 0
 #define OUT_FD 1
+#define NOF_ARGS 20
 
 // global variable(s)
-int N = 10000;
+int N = 5000;
 int COMMAND_SIZE = 10000;
 
 // custom defined methods
+// shell related
 void clearShell();
 void getcwdShell();
 void initShell(int isNormalMode);
 void runShell(int isNormalMode);
+void runParser(char *buffer, int isNormalMode);
+void readCommand(char *command);
+// command exec related
 void execComposedNormal(char *cmd1[], char *cmd2[]);
 void execComposedTapped(char *cmd1[], char *cmd2[]);
 int execBuiltin(char *cmd1[]);
-void runParser(char command[], int isNormalMode);
-void readCommand(char *command);
 void runPipeSourceNormal(int pfd[], char *cmd1[]);
 void runPipeDestNormal(int pfd[], char *cmd2[]);
 int runPipeSourceTapped(int fd1[], int fd2[], char *cmd1[]);
 int runPipeDestTapped(int fd1[], int fd2[], char *cmd2[]);
-//  **********************
-
-void parseCommand(char command[], char *cmd1[]);
-int parseComposedCommand(char command[], char *commands[]);
-int parseUnknownCommand(char command[], char *cmd1[], char *cmd2[]);
-void executeCommand(char *cmd1[]);
+void runCommand(char *cmd1[]);
+// parser related
+void parseSingle(char *buffer, char *cmd1[]);
+int parseComposedCommand(char *buffer, char *commandBuffer[]);
+int parseUnknownCommand(char *buffer, char *cmd1[], char *cmd2[]);
 
 int main(int argc, char *argv[])
 {
@@ -121,44 +121,49 @@ void readCommand(char *command)
     strcpy(command, buffer);
 }
 
-void parseCommand(char command[], char *cmd1[])
+void parseSingle(char *buffer, char *cmd1[])
 {
-    for (int i = 0; i < MAX_ARGS + 1; i++)
+    int offset;
+    for (int pos = 0; pos < NOF_ARGS + 1; pos++)
     {
-        cmd1[i] = strsep(&command, " ");
-        if (cmd1[i] == NULL)
+        // seperate command to the arguments
+        cmd1[pos] = strsep(&buffer, " ");
+        if (!cmd1[pos])
         {
             break;
         }
-        i -= (strlen(cmd1[i]) == 0);
+        offset = (strlen(cmd1[pos]) == 0);
+        pos -= offset;
     }
 }
 
-int parseComposedCommand(char command[], char *commands[])
+int parseComposedCommand(char *buffer, char *commandBuffer[])
 {
-    for (int i = 0; i < 2; i++)
+    //int composed;
+    for (int pos = 0; pos < 2; pos++)
     {
-        commands[i] = strsep(&command, "|");
-        if (commands[i] == NULL)
+        commandBuffer[pos] = strsep(&buffer, "|");
+        //composed = pos + 1;
+        if (!commandBuffer[pos])
         {
             break;
         }
     }
-    return (commands[1] != NULL);
+    return (commandBuffer[1] != NULL);
 }
 
-int parseUnknownCommand(char command[], char *cmd1[], char *cmd2[])
+int parseUnknownCommand(char *buffer, char *cmd1[], char *cmd2[])
 {
-    char *commands[2];
-    int isComposedCommand = parseComposedCommand(command, commands);
+    char *commandBuffer[2];
+    int isComposedCommand = parseComposedCommand(buffer, commandBuffer);
     if (isComposedCommand)
     {
-        parseCommand(commands[0], cmd1);
-        parseCommand(commands[1], cmd2);
+        parseSingle(commandBuffer[0], cmd1);
+        parseSingle(commandBuffer[1], cmd2);
     }
     else
     {
-        parseCommand(command, cmd1);
+        parseSingle(buffer, cmd1);
     }
     int isBuiltInCommand = execBuiltin(cmd1);
     if (isBuiltInCommand)
@@ -192,26 +197,28 @@ int execBuiltin(char *cmd1[])
     return isBuiltInCmd;
 }
 
-void executeCommand(char *cmd1[])
+void runCommand(char *cmd1[])
 {
-    pid_t pid = fork(); // fork a child
-    if (pid < 0)
-    { // error case
-        fprintf(stderr, "\nFork failed.");
-        exit(1);
-    }
-    else if (pid == 0)
-    { // child process
+    int pid;
+
+    switch (pid = fork())
+    {
+
+    case 0: // child process
         if (execvp(cmd1[0], cmd1) < 0)
         {
             fprintf(stderr, "\nCommand execution failed.");
             exit(1);
         }
         exit(0); // successfully exit
-    }
-    else
-    {               // parent process
-        wait(NULL); // wait for the child to complete
+
+    default: // parent
+        wait(NULL);
+        break;
+
+    case -1:
+        perror("fork");
+        exit(1);
     }
 }
 
@@ -226,9 +233,9 @@ void executeCommand(char *cmd1[])
  */
 void execComposedTapped(char *cmd1[], char *cmd2[])
 {
-    int bytesTransferred = 0;
-    int readCount = 0;
+    int charCount = 0;
     int writeCount = 0;
+    int readCount = 0;
     int fd1[2]; // pipe 1
     int fd2[2]; // pipe 2
     pipe(fd1);
@@ -248,12 +255,12 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
             close(fd1[OUT_FD]); // close unused ends
             close(fd2[IN_FD]);
             // Transfer the bytes written to pipe 1 by child 1 to pipe 2
-            int bytesRead; // statistic
+            int bytesRead;
             char buffer[N];
             while ((bytesRead = read(fd1[IN_FD], buffer, N)) > 0)
             {
                 int bytesWritten = write(fd2[OUT_FD], buffer, bytesRead);
-                bytesTransferred += bytesRead + bytesWritten;
+                charCount += (bytesRead + bytesWritten);
                 readCount++;
                 writeCount++;
             }
@@ -263,7 +270,7 @@ void execComposedTapped(char *cmd1[], char *cmd2[])
             wait(NULL);
             wait(NULL);
             printf("\ncharacter-count: %d\nread-call-count: %d\nwrite-call-count: %d\n",
-                   bytesTransferred, readCount, writeCount);
+                   charCount, readCount, writeCount);
             // timer stop
             gettimeofday(&t2, NULL);
 
@@ -325,11 +332,11 @@ int runPipeDestTapped(int fd1[], int fd2[], char *cmd2[])
     return 1;
 }
 
-void runParser(char command[], int isNormalMode)
+void runParser(char *buffer, int isNormalMode)
 {
-    char *cmd1[MAX_ARGS + 1];
-    char *cmd2[MAX_ARGS + 1];
-    int isComposedCommand = parseUnknownCommand(command, cmd1, cmd2);
+    char *cmd1[NOF_ARGS + 1];
+    char *cmd2[NOF_ARGS + 1];
+    int isComposedCommand = parseUnknownCommand(buffer, cmd1, cmd2);
     if (isComposedCommand == 1)
     {
         if (isNormalMode == 1)
@@ -344,7 +351,7 @@ void runParser(char command[], int isNormalMode)
     }
     else if (isComposedCommand == 0)
     {
-        executeCommand(cmd1);
+        runCommand(cmd1);
     }
 }
 
